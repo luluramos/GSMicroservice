@@ -1,0 +1,1 @@
+print("Worker está funcionando")
