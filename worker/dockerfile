@@ -1,0 +1,15 @@
+# Usar uma imagem base do Node.js
+FROM node:14
+
+# Criar diretório de trabalho
+WORKDIR /app
+
+# Copiar arquivos de dependências e instalar
+COPY package*.json ./
+RUN npm install
+
+# Copiar o restante dos arquivos da aplicação
+COPY . .
+
+# Comando para iniciar o worker
+CMD ["node", "worker.js"]  # ou o nome do seu arquivo principal do worker
