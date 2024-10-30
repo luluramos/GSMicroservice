@@ -10,7 +10,7 @@ services:
       MYSQL_USER: user123
       MYSQL_PASSWORD: senha123
     volumes:
-      -./db-mysql/ddl.sql:/var/lib/mysql
+      - ./db-mysql/ddl.sql:/var/lib/mysql
 
   rabbitmq:
     image: rabbitmq:management
@@ -28,7 +28,7 @@ services:
 
   api:
     build:
-      context: ./api # Direcionar para o diretório onde está o Dockerfile da API
+      context: ./api 
     ports:
       - "3000:3000"
     environment:
@@ -40,7 +40,7 @@ services:
 
   worker:
     build:
-      context: ./worker # Direcionar para o diretório onde está o Dockerfile do Worker
+      context: ./worker
     depends_on:
       - rabbitmq
       - redis
