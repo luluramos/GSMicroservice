@@ -53,7 +53,7 @@ app.post('/diploma', async (req, res) => {
   console.log("Dados recebidos para inserção:", req.body);
 
   // Salvando os dados no MySQL
-  const query = `INSERT INTO diplomas (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const query = `INSERT INTO certificates (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
   connection.query(query, [
     nome,
