@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 3000
 
 # Comando para iniciar a API
-CMD ["node", "index.js"]  # ou o nome do seu arquivo principal
+CMD ["node", "app.js"]

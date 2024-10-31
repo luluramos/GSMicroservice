@@ -10,7 +10,7 @@ services:
       MYSQL_USER: user123
       MYSQL_PASSWORD: senha123
     volumes:
-      - ./db-mysql/ddl.sql:/var/lib/mysql
+      - ./db-mysql/ddl.sql:/docker-entrypoint-initdb.d/ddl.sql
 
   rabbitmq:
     image: rabbitmq:management
@@ -28,7 +28,10 @@ services:
 
   api:
     build:
-      context: ./api 
+      context: ./api
+    depends_on:
+      - rabbitmq
+      - mysql 
     ports:
       - "3000:3000"
     environment:

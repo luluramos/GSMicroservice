@@ -1,0 +1,11 @@
+{
+  "nome": "João da Silva",
+  "nacionalidade": "Brasileiro",
+  "estado": "SP",
+  "data_nascimento": "1990-05-20",
+  "documento": "123456789",
+  "data_conclusao": "2024-10-01",
+  "curso": "Engenharia de Software",
+  "carga_horaria": "360 horas",
+  "data_emissao": "2024-10-23"
+}
