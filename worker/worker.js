@@ -1,89 +1,64 @@
-const amqp = require('amqplib');
 const fs = require('fs');
-const pdf = require('html-pdf');
-const mysql = require('mysql2');
+const puppeteer = require('puppeteer');
+const mysql = require('mysql2/promise');
+const amqp = require('amqplib');
 
-// Conexão com o MySQL
-const connection = mysql.createConnection({
+// Configuração do pool de conexões com o MySQL
+const pool = mysql.createPool({
   host: 'mysql',
   user: 'user123',
   password: 'senha123',
-  database: 'certificates'
+  database: 'certificates',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-// Função para processar mensagens da fila
+// Função para substituir variáveis no HTML usando o formato [[variavel]]
+function replaceVariables(template, data) {
+  return template.replace(/\[\[(\w+)\]\]/g, (_, key) => data[key] || '');
+}
+
+// Função para gerar o PDF a partir de HTML
+async function generatePDF(htmlContent, outputPath) {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+  await page.pdf({ path: outputPath, format: 'A4', landscape: true });
+  await browser.close();
+}
+
+// Função principal para processar mensagens da fila
 async function processQueue() {
-  try {
-    const connection = await amqp.connect('amqp://rabbitmq');
-    const channel = await connection.createChannel();
-    const queue = 'diplomasQueue';
+  const connection = await amqp.connect('amqp://user:password@rabbitmq');
+  const channel = await connection.createChannel();
+  const queue = 'diplomasQueue';
 
-    await channel.assertQueue(queue, { durable: true });
-    console.log("Aguardando mensagens na fila...");
+  await channel.assertQueue(queue, { durable: true });
+  console.log("Aguardando mensagens na fila...");
 
-    channel.consume(queue, async (msg) => {
-      const data = JSON.parse(msg.content.toString());
-      console.log("Processando dados:", data);
+  channel.consume(queue, async (msg) => {
+    const data = JSON.parse(msg.content.toString());
+    console.log("Processando mensagem:", data);
 
-      // Criar o HTML do diploma
-      const html = await createHtmlTemplate(data);
-      
-      // Converter HTML em PDF
-      const pdfBuffer = await generatePdf(html);
-      
-      // Salvar o PDF
-      const fileName = `certificado_${data.documento}.pdf`;
-      fs.writeFileSync(`./certificados/${fileName}`, pdfBuffer);
+    // Ler e processar o template HTML
+    const template = fs.readFileSync('template.html', 'utf8');
+    const htmlContent = replaceVariables(template, data);
 
-      // Atualizar dados no banco
-      updateDatabase(data.documento, fileName);
+    // Caminho do PDF gerado
+    const outputPath = `./pdfs/${data.nome.replace(/ /g, '_')}_${data.id}.pdf`;
+    await generatePDF(htmlContent, outputPath);
 
-      // Confirmar o processamento da mensagem
-      channel.ack(msg);
-    });
-  } catch (error) {
-    console.error("Erro:", error);
-  }
-}
+    // Atualizar o banco de dados com o caminho do PDF
+    const query = `UPDATE certificates SET pdf_path = ? WHERE id = ?`;
+    await pool.query(query, [outputPath, data.id]);
 
-// Função para criar o template HTML
-async function createHtmlTemplate(data) {
-  let template = fs.readFileSync('template.html', 'utf-8');
-  template = template
-    .replace('[[nome]]', data.nome)
-    .replace('[[nacionalidade]]', data.nacionalidade)
-    .replace('[[estado]]', data.estado)
-    .replace('[[data_nascimento]]', data.data_nascimento)
-    .replace('[[documento]]', data.documento)
-    .replace('[[data_conclusao]]', data.data_conclusao)
-    .replace('[[curso]]', data.curso)
-    .replace('[[carga_horaria]]', data.carga_horaria)
-    .replace('[[data_emissao]]', data.data_emissao);
-  
-  return template;
-}
+    console.log("PDF gerado e banco de dados atualizado para:", data.nome);
 
-// Função para gerar PDF
-function generatePdf(html) {
-  return new Promise((resolve, reject) => {
-    pdf.create(html).toBuffer((err, buffer) => {
-      if (err) return reject(err);
-      resolve(buffer);
-    });
+    // Confirmação de processamento da mensagem
+    channel.ack(msg);
   });
 }
 
-// Função para atualizar dados no banco
-function updateDatabase(documento, fileName) {
-  const query = `UPDATE diplomas SET pdf_path = ? WHERE documento = ?`;
-  connection.query(query, [fileName, documento], (err) => {
-    if (err) {
-      console.error("Erro ao atualizar no banco de dados:", err);
-    } else {
-      console.log("Dados atualizados com sucesso!");
-    }
-  });
-}
-
-// Iniciar o worker
-processQueue();
+// Executa o processamento da fila
+processQueue().catch(console.error);
