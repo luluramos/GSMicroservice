@@ -10,7 +10,7 @@ services:
       MYSQL_USER: user123
       MYSQL_PASSWORD: senha123
     ports:
-      - 3306:3306
+      - 3307:3306
     volumes:
       - ./db-mysql/ddl.sql:/docker-entrypoint-initdb.d/ddl.sql
 

@@ -6,24 +6,23 @@ const bodyParser = require('body-parser');
 const app = express();
 app.use(bodyParser.json());
 
-// Conexão com o MySQL usando createPool
+const RABBITMQ_URL = 'amqp://user:password@rabbitmq';
+
+// Configuração do pool de conexões MySQL
 const pool = mysql.createPool({
   host: 'mysql',
   user: 'user123',
   password: 'senha123',
-  database: 'certificates'
+  database: 'certificates',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-pool.getConnection((err, connection) => {
-  if (err) throw err;
-  console.log('Conectado ao MySQL!');
-  connection.release(); // Libere a conexão imediatamente
-});
-
-// Conexão RabbitMQ
+// Função para enviar mensagem ao RabbitMQ
 async function sendToQueue(message) {
   try {
-    const connection = await amqp.connect('amqp://rabbitmq');
+    const connection = await amqp.connect(RABBITMQ_URL);
     const channel = await connection.createChannel();
     const queue = 'diplomasQueue';
 
@@ -31,8 +30,13 @@ async function sendToQueue(message) {
     channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
 
     console.log("Mensagem enviada para fila:", message);
+
+    // Fecha a conexão para evitar conexões pendentes
+    await channel.close();
+    await connection.close();
   } catch (error) {
-    console.error("Erro ao enviar mensagem para fila:", error);
+    console.error("Erro ao enviar mensagem para fila RabbitMQ:", error.message);
+    throw new Error("Falha na conexão com o RabbitMQ");
   }
 }
 
@@ -47,37 +51,50 @@ app.post('/diploma', async (req, res) => {
     data_conclusao,
     curso,
     carga_horaria,
-    data_emissao
+    data_emissao,
+    pdf_path
   } = req.body;
 
   console.log("Dados recebidos para inserção:", req.body);
 
-  // Salvando os dados no MySQL
-  const query = `INSERT INTO certificates (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-  connection.query(query, [
-    nome,
-    nacionalidade,
-    estado,
-    data_nascimento,
-    documento,
-    data_conclusao,
-    curso,
-    cargaHorariaInt,   
-    data_emissao,
-    pdf_path           
-  ], (err, result) => {
+  // Obter conexão do pool e realizar a inserção
+  pool.getConnection((err, connection) => {
     if (err) {
-      console.error("Erro ao salvar no MySQL:", err.message);
-      return res.status(500).send('Erro ao salvar no banco de dados.');
+      console.error("Erro ao conectar ao MySQL:", err.message);
+      return res.status(500).send('Erro ao conectar ao banco de dados.');
     }
+    console.log("Conexão com o MySQL estabelecida!");
 
-    console.log("Dados inseridos no banco de dados com sucesso:", result);
+    const query = `INSERT INTO certificates (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao, pdf_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    // Enviar os dados para a fila RabbitMQ
-    sendToQueue(req.body);
+    connection.query(query, [
+      nome,
+      nacionalidade,
+      estado,
+      data_nascimento,
+      documento,
+      data_conclusao,
+      curso,
+      carga_horaria,
+      data_emissao,
+      pdf_path
+    ], async (err, result) => {
+      connection.release();  // Libere a conexão após a consulta
+      if (err) {
+        console.error("Erro ao salvar no MySQL:", err.message);
+        return res.status(500).send('Erro ao salvar no banco de dados.');
+      }
 
-    res.status(200).send('Dados recebidos e processados com sucesso.');
+      console.log("Dados inseridos no banco de dados com sucesso:", result);
+
+      try {
+        await sendToQueue(req.body);
+        res.status(200).send('Dados recebidos e processados com sucesso.');
+      } catch (error) {
+        console.error("Erro ao enviar para a fila RabbitMQ:", error.message);
+        res.status(500).send('Erro ao enviar dados para a fila.');
+      }
+    });
   });
 });
 
