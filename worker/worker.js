@@ -14,6 +14,10 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+// Configuração do RabbitMQ
+const rabbitmqHost = process.env.RABBITMQ_HOST || 'rabbitmq';
+const rabbitmqUrl = `amqp://user:password@${rabbitmqHost}:5672`;
+
 // Função para substituir variáveis no HTML usando o formato [[variavel]]
 function replaceVariables(template, data) {
   return template.replace(/\[\[(\w+)\]\]/g, (_, key) => data[key] || '');
@@ -21,7 +25,6 @@ function replaceVariables(template, data) {
 
 // Função para gerar o PDF a partir de HTML
 async function generatePDF(htmlContent, outputPath) {
-  // Adicionando as opções --no-sandbox e --disable-setuid-sandbox
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
     headless: true
@@ -32,9 +35,25 @@ async function generatePDF(htmlContent, outputPath) {
   await browser.close();
 }
 
+// Função para conectar ao RabbitMQ com tentativas de reconexão
+async function connectToRabbitMQ() {
+  const RETRY_DELAY = 5000; // 5 segundos
+
+  while (true) {
+    try {
+      const connection = await amqp.connect(rabbitmqUrl);
+      console.log("Conectado ao RabbitMQ");
+      return connection;
+    } catch (error) {
+      console.log("Falha na conexão ao RabbitMQ, tentando novamente em 5 segundos...");
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    }
+  }
+}
+
 // Função principal para processar mensagens da fila
 async function processQueue() {
-  const connection = await amqp.connect('amqp://user:password@rabbitmq');
+  const connection = await connectToRabbitMQ(); // Usa a função de conexão com reconexão
   const channel = await connection.createChannel();
   const queue = 'diplomasQueue';
 
