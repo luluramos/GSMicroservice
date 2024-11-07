@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const puppeteer = require('puppeteer');
 const mysql = require('mysql2/promise');
 const amqp = require('amqplib');
@@ -68,13 +69,22 @@ async function processQueue() {
     const template = fs.readFileSync('template.html', 'utf8');
     const htmlContent = replaceVariables(template, data);
 
-    // Caminho do PDF gerado
-    const outputPath = `./pdfs/${data.nome.replace(/ /g, '_')}_${data.id}.pdf`;
-    await generatePDF(htmlContent, outputPath);
+    // Caminho do PDF gerado localmente
+    const pdfDir = './pdfs';
+    if (!fs.existsSync(pdfDir)){
+      fs.mkdirSync(pdfDir);
+    }
+    const localPath = path.join(pdfDir, `${data.nome.replace(/ /g, '_')}_${data.id}.pdf`);
+
+    // Caminho para armazenar no banco de dados
+    const dbPath = `/certificates/${data.nome.replace(/ /g, '_')}_${data.id}.pdf`;
+
+    // Gera o PDF
+    await generatePDF(htmlContent, localPath);
 
     // Atualizar o banco de dados com o caminho do PDF
     const query = `UPDATE certificates SET pdf_path = ? WHERE id = ?`;
-    await pool.query(query, [outputPath, data.id]);
+    await pool.query(query, [dbPath, data.id]);
 
     console.log("PDF gerado e banco de dados atualizado para:", data.nome);
 
