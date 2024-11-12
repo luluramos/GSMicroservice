@@ -2,6 +2,8 @@ const express = require('express');
 const mysql = require('mysql2');
 const amqp = require('amqplib');
 const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(bodyParser.json());
@@ -51,13 +53,11 @@ app.post('/diploma', async (req, res) => {
     data_conclusao,
     curso,
     carga_horaria,
-    data_emissao,
-    pdf_path
+    data_emissao
   } = req.body;
 
   console.log("Dados recebidos para inserção:", req.body);
 
-  // Obter conexão do pool e realizar a inserção
   pool.getConnection((err, connection) => {
     if (err) {
       console.error("Erro ao conectar ao MySQL:", err.message);
@@ -65,7 +65,7 @@ app.post('/diploma', async (req, res) => {
     }
     console.log("Conexão com o MySQL estabelecida!");
 
-    const query = `INSERT INTO certificates (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao, pdf_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const query = `INSERT INTO certificates (nome, nacionalidade, estado, data_nascimento, documento, data_conclusao, curso, carga_horaria, data_emissao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     connection.query(query, [
       nome,
@@ -76,10 +76,9 @@ app.post('/diploma', async (req, res) => {
       data_conclusao,
       curso,
       carga_horaria,
-      data_emissao,
-      pdf_path
+      data_emissao
     ], async (err, result) => {
-      connection.release();  // Libere a conexão após a consulta
+      connection.release();
       if (err) {
         console.error("Erro ao salvar no MySQL:", err.message);
         return res.status(500).send('Erro ao salvar no banco de dados.');
@@ -88,7 +87,7 @@ app.post('/diploma', async (req, res) => {
       console.log("Dados inseridos no banco de dados com sucesso:", result);
 
       try {
-        await sendToQueue(req.body);
+        await sendToQueue({ ...req.body, id: result.insertId });
         res.status(200).send('Dados recebidos e processados com sucesso.');
       } catch (error) {
         console.error("Erro ao enviar para a fila RabbitMQ:", error.message);
@@ -98,9 +97,16 @@ app.post('/diploma', async (req, res) => {
   });
 });
 
-// Rota de teste para o caminho raiz
-app.get('/', (req, res) => {
-  res.send('API está funcionando!');
+// Endpoint para servir o PDF
+app.get('/certificados/:nome', (req, res) => {
+  const pdfPath = path.join(__dirname, 'pdfs', req.params.nome);
+
+  fs.access(pdfPath, fs.constants.F_OK, (err) => {
+    if (err) {
+      return res.status(404).send('Certificado não encontrado.');
+    }
+    res.sendFile(pdfPath);
+  });
 });
 
 // Iniciar servidor

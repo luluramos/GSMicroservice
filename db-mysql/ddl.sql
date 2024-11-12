@@ -12,6 +12,5 @@ CREATE TABLE certificates (
     curso VARCHAR(255) NOT NULL,
     carga_horaria INT NOT NULL,
     data_emissao DATE NOT NULL,
-    pdf_path VARCHAR(255) NOT NULL
+    pdf_path VARCHAR(255) DEFAULT NULL
 );
-
