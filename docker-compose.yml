@@ -30,10 +30,13 @@ services:
     depends_on:
       - rabbitmq
       - mysql
+      - redis
     ports:
       - "3000:3000"
     volumes:
       - ./pdfs:/app/pdfs  # Volume compartilhado para PDFs gerados
+    environment:
+      - REDIS_HOST=redis  # Definindo o host do Redis para a API
 
   worker:
     build:
@@ -44,6 +47,8 @@ services:
     volumes:
       - ./pdfs:/app/pdfs  # Volume compartilhado para PDFs gerados
 
-volumes:
-  mysql_data:
-    driver: local
+  redis:
+    image: redis:alpine
+    restart: always
+    ports:
+      - "6379:6379"  # Porta padrão do Redis
